@@ -1,0 +1,16 @@
+# python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+build/
+
+# native build products (built by native/build.sh)
+native/vpointer
+native/wlr-virtual-pointer-unstable-v1-client-protocol.h
+native/wlr-virtual-pointer-unstable-v1-protocol.c
+
+# runtime output
+captures/
+out/
