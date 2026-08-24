@@ -364,7 +364,7 @@ def _fill_vrm_settings(avatar_name: str, creators: str) -> None:
 
 
 def to_wine_path(p: str | Path) -> str:
-    r"""/home/nuri/x -> Z:\home\nuri\x  (the Proton prefix maps Z:\ to /)."""
+    r"""/home/you/x -> Z:\home\you\x  (the Proton prefix maps Z:\ to /)."""
     return "Z:" + str(Path(p).resolve()).replace("/", "\\")
 
 
