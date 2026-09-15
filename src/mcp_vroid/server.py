@@ -23,6 +23,7 @@ import functools
 import os
 import shutil
 import subprocess
+import sys as _sys
 import time
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -77,6 +78,41 @@ MAX_IMAGE_EDGE = int(os.environ.get("MCP_VROID_MAX_IMAGE_PX", "1600"))
 async def _blocking(fn, *args, **kwargs):
     """Run a blocking driver call off the event loop."""
     return await anyio.to_thread.run_sync(functools.partial(fn, *args, **kwargs))
+
+
+def _helper_status() -> dict[str, Any]:
+    """Platform helpers for vroid_status. Tool schema is unchanged."""
+    helpers: dict[str, Any] = {
+        "tesseract": bool(shutil.which("tesseract")),
+    }
+    if _sys.platform == "darwin":
+        ax_trusted = False
+        screen_recording = False
+        try:
+            from ApplicationServices import AXIsProcessTrusted
+            ax_trusted = bool(AXIsProcessTrusted())
+        except Exception:
+            pass
+        try:
+            from Quartz import CGPreflightScreenCaptureAccess
+            screen_recording = bool(CGPreflightScreenCaptureAccess())
+        except Exception:
+            pass
+        helpers.update({
+            "screencapture": bool(shutil.which("screencapture") or
+                                  Path("/usr/sbin/screencapture").exists()),
+            "ax_trusted": ax_trusted,
+            "screen_recording": screen_recording,
+            "backend": "macos",
+        })
+    else:
+        helpers.update({
+            "vpointer": {"path": str(VPOINTER), "present": VPOINTER.exists()},
+            "grim": bool(shutil.which("grim")),
+            "hyprctl": bool(shutil.which("hyprctl")),
+            "backend": "wayland",
+        })
+    return helpers
 
 
 def _require_window() -> W.Window:
@@ -198,8 +234,7 @@ async def vroid_launch(
     def work() -> dict[str, Any]:
         global _prev_workspace
         if restart and W.find_window():
-            subprocess.run(["pkill", "-f", "VRoidStudio.exe"],
-                           capture_output=True)
+            W.terminate()
             time.sleep(5)
         win, prev = W.prepare(timeout)
         if _prev_workspace is None and prev != W.WORKSPACE:
@@ -239,12 +274,7 @@ async def vroid_status() -> dict[str, Any]:
             "captures_dir": str(CAPTURES),
             "out_dir": str(OUT),
             "recovered_session_env": _FILLED_ENV,
-            "helpers": {
-                "vpointer": {"path": str(VPOINTER), "present": VPOINTER.exists()},
-                "grim": bool(shutil.which("grim")),
-                "tesseract": bool(shutil.which("tesseract")),
-                "hyprctl": bool(shutil.which("hyprctl")),
-            },
+            "helpers": _helper_status(),
         }
         if win is not None:
             try:

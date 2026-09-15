@@ -4,6 +4,25 @@ All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions
 follow [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+* **macOS backend** (`src/mcp_vroid/driver/macos/`): AX + Quartz window
+  discovery, `screencapture` window capture, Quartz `CGEvent` pointer/keys.
+  Selected at import via `sys.platform`; Wayland modules moved to
+  `src/mcp_vroid/driver/wayland/`. MCP tool names are unchanged.
+* Accessibility reconnaissance of native VRoid Studio 2.14.0: Unity does not
+  expose parameter widgets through AX (`docs/macos-ax.md`, `docs/macos.md`).
+
+### Changed
+
+* `_find_label` keeps 1-letter tokens (`X`/`Y`/`Z`) so `Eye Size X` is not
+  matched as `Eye Size Y`. Linux benefits from the same fix.
+* `read_param` uses a wider numeric-box crop so non-2560 layouts still OCR
+  values such as `0.850`.
+* `python-xlib` is Linux-only; PyObjC frameworks are Darwin-only.
+
 ## [0.1.0] — 2026-08-24
 
 First public release.

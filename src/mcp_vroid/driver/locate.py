@@ -56,10 +56,11 @@ def ocr_words(img: Image.Image | Shot, upscale: float = 2.0,
         prepped.save(p)
         out = subprocess.run(
             ["tesseract", str(p), "stdout", "-l", lang, "--psm", str(psm), "tsv"],
-            capture_output=True, text=True,
+            capture_output=True,
         )
+    stdout = (out.stdout or b"").decode("utf-8", "replace")
     matches: list[Match] = []
-    lines = out.stdout.splitlines()
+    lines = stdout.splitlines()
     if not lines:
         return matches
     header = lines[0].split("\t")

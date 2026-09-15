@@ -35,6 +35,9 @@ def _newest(paths: list[Path]) -> Path | None:
 
 def ensure_session_env() -> dict[str, str]:
     """Fill in the missing session variables; returns what this call set."""
+    import sys
+    if sys.platform == "darwin":
+        return {}
     filled: dict[str, str] = {}
     rd = _runtime_dir()
 

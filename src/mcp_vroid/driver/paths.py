@@ -32,6 +32,17 @@ CAPTURES = _dir("MCP_VROID_CAPTURES", _state_home() / "mcp-vroid/captures")
 OUT = _dir("MCP_VROID_OUT", _state_home() / "mcp-vroid/out")
 
 
+def next_capture_path(tag: str = "") -> Path:
+    n = 0
+    for p in CAPTURES.glob("[0-9][0-9][0-9]*.png"):
+        try:
+            n = max(n, int(p.name[:3]))
+        except ValueError:
+            pass
+    name = f"{n + 1:03d}" + (f"-{tag}" if tag else "") + ".png"
+    return CAPTURES / name
+
+
 def _find_vpointer() -> Path:
     env = os.environ.get("MCP_VROID_VPOINTER")
     if env:

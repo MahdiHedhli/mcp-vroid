@@ -1,6 +1,6 @@
 # mcp-vroid
 
-**Drive VRoid Studio from any MCP client, on Linux/Wayland.** Launch the app,
+**Drive VRoid Studio from any MCP client, on Linux/Wayland or macOS.** Launch the app,
 look at it, find widgets in the picture, click and type, set parameters, and
 export a `.vrm` — all as MCP tools.
 
@@ -45,7 +45,7 @@ Developed and tested on **Arch Linux + Hyprland**, with VRoid Studio 2.14.0
 
 | | needed for | how portable |
 |---|---|---|
-| **Hyprland** ≥ 0.55 | window discovery, focus, workspaces, closing the screensaver — via `hyprctl` and its Lua dispatch API | **Hyprland-specific.** All of it lives in `src/mcp_vroid/driver/window.py`; a Sway port is a `swaymsg` rewrite of that one file. |
+| **Hyprland** ≥ 0.55 | window discovery, focus, workspaces, closing the screensaver — via `hyprctl` and its Lua dispatch API | **Hyprland-specific.** Lives in `src/mcp_vroid/driver/wayland/window.py`. `window.py` is a facade: Wayland by default, `macos/` on Darwin. |
 | `grim` | screenshots | any **wlroots** compositor (`wlr-screencopy`) |
 | **`zwlr_virtual_pointer_unstable_v1`** | moving and clicking the real cursor | any **wlroots** compositor |
 | **Xwayland** (`DISPLAY`) | keyboard and wheel, via X11 **XTEST** | any Wayland session with Xwayland |
@@ -54,12 +54,38 @@ Developed and tested on **Arch Linux + Hyprland**, with VRoid Studio 2.14.0
 | **VRoid Studio** via Steam/Proton (appid `1486350`) | the app being driven | the Steam launch path is assumed; a native/Wine install needs the launch command changed |
 | Python **3.11+** and [`uv`](https://docs.astral.sh/uv/) | the server itself | portable |
 
-So: **wlroots + Xwayland** for the input and capture layer, **Hyprland only**
+So on Linux: **wlroots + Xwayland** for the input and capture layer, **Hyprland only**
 for window management. On Arch:
 
 ```bash
 sudo pacman -S grim tesseract tesseract-data-eng wayland gcc pkgconf
 ```
+
+### macOS (native VRoid Studio)
+
+This fork adds a separable backend under `src/mcp_vroid/driver/macos/`. The
+MCP tools and `actions.py` VRoid flows are unchanged. Native VRoid Studio
+2.14.0 is Unity IL2CPP: Accessibility exposes window chrome only (see
+[`docs/macos-ax.md`](docs/macos-ax.md)), so parameters are still located by
+OCR. Capture uses `screencapture` (ScreenCaptureKit); clicks and keys go
+through Quartz `CGEvent`.
+
+| | needed for |
+|---|---|
+| **Accessibility** permission | focus / raise the VRoid window |
+| **Screen Recording** permission | window screenshots |
+| `tesseract` + `eng` traineddata | OCR (`brew install tesseract`) |
+| native **VRoid Studio.app** 2.14.0 | English UI |
+
+`native/build.sh` is **not** required on macOS. Grant the two permissions to
+the process that launches the MCP server (Terminal, Grok, Claude, …), then
+`uv sync` and skip the vpointer build. Architecture, limitations, and the
+AX reconnaissance are in [`docs/macos.md`](docs/macos.md) and
+[`docs/macos-ax.md`](docs/macos-ax.md).
+
+Quartz capture/input techniques follow the approach used by Seiðr-Smiðja's
+Brúarhönd daemon (Apache-2.0); this tree does not vendor that code. See
+`NOTICE`.
 
 ## Quickstart
 
@@ -67,7 +93,7 @@ sudo pacman -S grim tesseract tesseract-data-eng wayland gcc pkgconf
 git clone https://github.com/nhodges/mcp-vroid
 cd mcp-vroid
 uv sync                 # virtualenv + dependencies
-bash native/build.sh    # builds native/vpointer  <-- REQUIRED, not optional
+bash native/build.sh    # Linux/Wayland only: builds native/vpointer
 ```
 
 `native/build.sh` compiles a ~150-line C client for the Wayland

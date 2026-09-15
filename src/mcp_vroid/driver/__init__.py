@@ -1,10 +1,10 @@
-"""GUI-automation driver for VRoid Studio on Hyprland/Wayland.
+"""GUI-automation driver for VRoid Studio.
 
-The loop is: capture (grim) -> locate (tesseract OCR / cv2 template match)
--> act (wlr virtual pointer for the mouse, X11 XTEST for keys/wheel)
--> capture again.
+The loop is: capture -> locate (tesseract OCR / cv2) -> act -> capture again.
 
-Originally written as the `tools/vroid-driver` spike in the author's
-`arrakis` project; vendored here as the engine under the MCP server.
+Platform backends live in `wayland/` (Hyprland + grim + virtual pointer +
+XTEST) and `macos/` (AX window chrome + screencapture + Quartz CGEvent).
+`window`, `capture` and `input` are facades; VRoid-specific flows stay in
+`actions.py` and do not branch on OS.
 """
 from .paths import CAPTURES, OUT, VPOINTER  # noqa: F401

@@ -1,0 +1,15 @@
+mcp-vroid
+
+Linux/Wayland driver:
+  Copyright (c) 2026 Nuri Hodges
+  MIT License (see LICENSE)
+
+macOS backend in this fork:
+  Copyright (c) 2026 Mahdi Hedhli
+  MIT License (see LICENSE)
+
+The macOS capture and HID-event approach was informed by Seiðr-Smiðja
+Brúarhönd (https://github.com/hrabanazviking/Seidr-Smidja), Copyright
+(c) 2026 Volmarr Wyrd, licensed under the Apache License, Version 2.0.
+No source was copied from that project. A copy of the Apache-2.0 license
+is available at https://www.apache.org/licenses/LICENSE-2.0

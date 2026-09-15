@@ -459,7 +459,8 @@ def _find_label(s: Shot, label: str):
     words = label.replace("(", " ").replace(")", " ").split()
     hits = []
     for w in words:
-        if len(w) < 3:
+        # Keep 1-letter tokens ("X" vs "Y" on Eye Size X/Y). Skip empty junk.
+        if not w:
             continue
         hits.append(L.find_text(s, w, region=reg, exact=True, all_matches=True) or [])
     if not hits or not all(hits):
@@ -505,7 +506,8 @@ def read_param(label: str) -> str:
     """OCR the numeric box of a row (after find_param)."""
     s, m = find_param(label)
     w = s.image.width
-    box = s.crop((int(w * 0.963), m.center[1] - 14, int(w * 0.993), m.center[1] + 14))
+    # Wide enough for a 1410-px macOS editor as well as the 2560-px Linux layout.
+    box = s.crop((int(w * 0.90), m.center[1] - 16, int(w * 0.995), m.center[1] + 16))
     ms = L.all_text(box)
     return " ".join(t.text for t in ms)
 
