@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 
 from . import actions as A
 from . import capture as C
@@ -38,6 +38,18 @@ class ObservedRow:
     y: int
     control: str
     numeric_entry: bool
+    # Provenance. A row without these came from a caller that built it by
+    # hand (tests, legacy fixtures); merge treats missing context as unknown.
+    page: int = 0
+    shot: str | None = None
+    prev_label: str | None = None
+    next_label: str | None = None
+    # Set by merge_pages. `duplicate`: another distinct control shares this
+    # caption. `value_conflict`: the same control was read with different
+    # values on overlapping pages, so its prior value is unreadable.
+    duplicate: bool = False
+    value_conflict: bool = False
+    seen_on_pages: list[int] = field(default_factory=list)
 
     def key(self) -> str:
         return L._norm(self.label)
@@ -144,21 +156,81 @@ def parse_panel(matches: list[L.Match],
     return rows
 
 
+def _same_context(a: ObservedRow, b: ObservedRow) -> bool | None:
+    """True/False when both rows carry neighbour captions; None when unknown."""
+    if a.prev_label is None and a.next_label is None:
+        return None
+    if b.prev_label is None and b.next_label is None:
+        return None
+    na = (L._norm(a.prev_label or ""), L._norm(a.next_label or ""))
+    nb = (L._norm(b.prev_label or ""), L._norm(b.next_label or ""))
+    # Overlapping pages clip one neighbour at the page edge; require the
+    # neighbours that are present on both sides to agree.
+    agree = [x == y for x, y in zip(na, nb) if x and y]
+    return all(agree) if agree else None
+
+
 def merge_pages(pages: list[list[ObservedRow]]) -> list[ObservedRow]:
-    """First-seen order. A later page may fill in a missing value, not replace."""
-    by_key: dict[str, ObservedRow] = {}
-    order: list[str] = []
-    for page in pages:
+    """Merge overlapping scroll pages without hiding distinct controls.
+
+    Rules, in order:
+    * Same key on the *same* page → two distinct controls. Both are kept and
+      flagged `duplicate` (Face Sets really has two "Nose Size" rows).
+    * Same key on a later page with the same value (or one side blank) and
+      no contradicting neighbour context → the same row reappearing after a
+      scroll; merged, pages recorded.
+    * Same key on a later page with a different readable value → same row
+      if the neighbour context agrees (flag `value_conflict`, keep both
+      readings), otherwise a distinct control (flag `duplicate`).
+    First-seen order is preserved.
+    """
+    merged: list[ObservedRow] = []
+    by_key: dict[str, list[ObservedRow]] = {}
+    for page_idx, page in enumerate(pages):
         for row in page:
             k = row.key()
             if not k:
                 continue
-            if k not in by_key:
-                by_key[k] = row
-                order.append(k)
-            elif by_key[k].value in (None, "") and row.value:
-                by_key[k] = row
-    return [by_key[k] for k in order]
+            # Rows built by hand (no shot) get their page from list position.
+            pg = row.page if row.shot is not None else page_idx
+            row.page = pg
+            row.seen_on_pages = [pg]
+            candidates = by_key.get(k) or []
+            target = None
+            for cand in candidates:
+                if pg in cand.seen_on_pages:
+                    # Already saw this caption on this very page: a second
+                    # occurrence is a distinct control, never a re-read.
+                    continue
+                ctx = _same_context(cand, row)
+                values_agree = (
+                    cand.value in (None, "") or row.value in (None, "")
+                    or cand.value == row.value
+                )
+                if ctx is False:
+                    continue
+                if values_agree or ctx is True:
+                    target = cand
+                    break
+            if target is None:
+                if candidates:
+                    row.duplicate = True
+                    for cand in candidates:
+                        cand.duplicate = True
+                by_key.setdefault(k, []).append(row)
+                merged.append(row)
+                continue
+            # merge into target
+            if target.value in (None, "") and row.value:
+                target.value = row.value
+                target.control, target.numeric_entry = _control_for(target.label, row.value)
+            elif row.value and target.value and row.value != target.value:
+                target.value_conflict = True
+                target.numeric_entry = False
+            for pg in row.seen_on_pages:
+                if pg not in target.seen_on_pages:
+                    target.seen_on_pages.append(pg)
+    return merged
 
 
 def _inventory_box(s: Shot) -> tuple[int, int, int, int]:
@@ -176,10 +248,17 @@ def panel_words(s: Shot) -> list[L.Match]:
             for m in words]
 
 
-def inventory_from_shot(s: Shot) -> list[ObservedRow]:
-    """Parse one capture. No input."""
+def inventory_from_shot(s: Shot, page: int = 0) -> list[ObservedRow]:
+    """Parse one capture. No input. Rows carry page, shot and neighbour captions."""
     value_x = int(s.image.width * VALUE_X_FRAC)
-    return parse_panel(panel_words(s), value_x_min=value_x)
+    rows = parse_panel(panel_words(s), value_x_min=value_x)
+    for i, r in enumerate(rows):
+        r.page = page
+        r.shot = str(s.path)
+        r.prev_label = rows[i - 1].label if i > 0 else None
+        r.next_label = rows[i + 1].label if i + 1 < len(rows) else None
+        r.seen_on_pages = [page]
+    return rows
 
 
 def inventory_section(section: str, max_pages: int = 24,
@@ -215,7 +294,7 @@ def inventory_section(section: str, max_pages: int = 24,
 
     for i in range(max_pages):
         s = C.grab_window(tag=f"inv-{section}-{i}")
-        rows = inventory_from_shot(s)
+        rows = inventory_from_shot(s, page=i)
         pages.append(rows)
         fp = tuple((r.key(), r.value) for r in rows)
         crop = s.crop(_inventory_box(s))
@@ -247,6 +326,14 @@ def inventory_section(section: str, max_pages: int = 24,
         stop_reason = "max_pages"
 
     merged = merge_pages(pages)
+    duplicates = [asdict(r) for r in merged if r.duplicate]
+    unreadable = [asdict(r) for r in merged
+                  if r.value_conflict or (r.control == "unknown" and r.value is not None)]
+    unmapped = [asdict(r) for r in merged if r.value is None]
+    # Coverage is demonstrated only when the crawl observed the list end:
+    # either the whole list fit on the first page or scrolling stopped
+    # changing the panel. Hitting max_pages proves nothing.
+    complete = stop_reason in ("panel_end_visible", "unchanged_panel")
     return {
         "schema_version": 1,
         "vroid_version": "2.14.0",
@@ -256,5 +343,16 @@ def inventory_section(section: str, max_pages: int = 24,
         "stop_reason": stop_reason,
         "pages_scanned": len(pages),
         "count": len(merged),
+        "coverage": {
+            "complete": complete,
+            "reason": stop_reason,
+            "pages_scanned": len(pages),
+            "max_pages": max_pages,
+            "shots": [r.shot for r in (pages[0] if pages else [])][:1]
+                     + [pg[0].shot for pg in pages[1:] if pg],
+        },
+        "duplicates": duplicates,
+        "unreadable": unreadable,
+        "unmapped": unmapped,
         "parameters": [asdict(r) for r in merged],
     }

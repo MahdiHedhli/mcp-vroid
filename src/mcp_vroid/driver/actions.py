@@ -469,27 +469,47 @@ def scroll_panel(ticks: int, s: Shot | None = None) -> None:
     I.scroll(ticks, *_frac(s, *F_PANEL_SCROLL), space="image", shot=s)
 
 
-def _find_label(s: Shot, label: str):
-    """Match a parameter label; tesseract swaps word order on some rows
-    ("Size Head"), so fall back to matching the distinctive word."""
+class AmbiguousTarget(RuntimeError):
+    """More than one panel row matches a label on the same page.
+
+    Face Sets on VRoid 2.14 shows two rows literally captioned "Nose Size";
+    typing into "the first one found" is a blind write.
+    """
+
+
+def _find_label_rows(s: Shot, label: str) -> list:
+    """Every panel row whose caption matches `label` (one Match per row, top→bottom).
+
+    Tesseract swaps word order on some rows ("Size Head") and splits captions
+    into words, so after the exact-phrase attempt we accept any line on which
+    every word of the label lands.
+    """
     reg = _panel_region(s)
-    m = L.find_text(s, label, region=reg, exact=True)
-    if m:
-        return m
-    words = label.replace("(", " ").replace(")", " ").split()
+    rows: list = []
+
+    def _add(m):
+        if all(abs(m.center[1] - r.center[1]) >= 12 for r in rows):
+            rows.append(m)
+
+    for m in L.find_text(s, label, region=reg, exact=True, all_matches=True) or []:
+        _add(m)
+    words = [w for w in label.replace("(", " ").replace(")", " ").split() if w]
     hits = []
     for w in words:
-        # Keep 1-letter tokens ("X" vs "Y" on Eye Size X/Y). Skip empty junk.
-        if not w:
-            continue
+        # Keep 1-letter tokens ("X" vs "Y" on Eye Size X/Y).
         hits.append(L.find_text(s, w, region=reg, exact=True, all_matches=True) or [])
-    if not hits or not all(hits):
-        return None
-    # rows where every word lands on the same line
-    for a in hits[0]:
-        if all(any(abs(b.center[1] - a.center[1]) < 12 for b in hs) for hs in hits[1:]):
-            return a
-    return None
+    if hits and all(hits):
+        for a in hits[0]:
+            if all(any(abs(b.center[1] - a.center[1]) < 12 for b in hs) for hs in hits[1:]):
+                _add(a)
+    rows.sort(key=lambda m: m.center[1])
+    return rows
+
+
+def _find_label(s: Shot, label: str):
+    """First panel row matching `label`, or None. See _find_label_rows."""
+    rows = _find_label_rows(s, label)
+    return rows[0] if rows else None
 
 
 def _ocr_value(s: Shot, m) -> str:
@@ -569,6 +589,79 @@ def _type_value(s: Shot, m, value: float) -> None:
         I.set_safety(True)
     time.sleep(0.12)
     I.type_field_value(f"{value:.3f}")
+
+
+# --- transactional primitives ----------------------------------------------
+# A caller that must journal "about to type" / "typed" / "observed" separately
+# (the Lyra executor) uses these three instead of set_param/read_param.
+
+def locate_param(label: str, from_top: bool = True, max_pages: int = 24):
+    """Scroll to `label` and return (shot, Match) for exactly one row.
+
+    Raises AmbiguousTarget when the page that shows the row shows more than
+    one row with that caption, RuntimeError when no row is found. No typing.
+    """
+    s, m = find_param(label, max_pages=max_pages, from_top=from_top)
+    rows = _find_label_rows(s, label)
+    if len(rows) > 1:
+        raise AmbiguousTarget(
+            f"{len(rows)} rows captioned {label!r} on the same page "
+            f"(y={[r.center[1] for r in rows]}); see {s.path}")
+    return s, m
+
+
+def dispatch_value(s: Shot, m, value: float) -> None:
+    """Type `value` into the chip of the row `m` located in `s`.
+
+    Once this returns, input has been dispatched. If it raises, the write
+    outcome is *uncertain* — the click or part of the keystrokes may have
+    landed. Callers must treat that as a possible mutation.
+    """
+    _type_value(s, m, value)
+
+
+def _parse_chip(raw: str) -> float | None:
+    try:
+        return float(raw.replace("cm", "").replace(" ", "").strip())
+    except ValueError:
+        return None
+
+
+def observe_param(label: str, s: Shot | None = None, locate: bool = True,
+                  settle: float = 0.0) -> dict:
+    """One fresh, read-only observation of a row's numeric chip.
+
+    Returns {"status": "readable" | "unreadable" | "not_visible",
+             "raw": str | None, "value": float | None, "shot": str | None,
+             "row_y": int | None}.
+
+    `unreadable` means the row was located but the chip OCR did not yield a
+    number. Never types, never retries — the caller owns the retry budget.
+    With `locate=True` a row that is not on the current page is scrolled to
+    (scroll only). A `not_visible` row is reported, not guessed.
+    """
+    if settle:
+        time.sleep(settle)
+    if s is None:
+        s = shot(f"observe-{L._norm(label)}")
+    m = _find_label(s, label)
+    if m is None and locate:
+        try:
+            s, m = find_param(label, from_top=False)
+        except RuntimeError:
+            try:
+                s, m = find_param(label, from_top=True)
+            except RuntimeError:
+                m = None
+    if m is None:
+        return {"status": "not_visible", "raw": None, "value": None,
+                "shot": str(s.path), "row_y": None}
+    raw = _ocr_value(s, m)
+    val = _parse_chip(raw)
+    return {
+        "status": "readable" if val is not None else "unreadable",
+        "raw": raw, "value": val, "shot": str(s.path), "row_y": m.center[1],
+    }
 
 
 def set_param(label: str, value: float, from_top: bool = True) -> Shot:
