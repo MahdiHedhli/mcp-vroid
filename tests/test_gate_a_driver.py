@@ -273,3 +273,68 @@ def test_apply_params_noop_is_not_typed():
     assert out["ok"] is True
     assert out["verified"][0]["outcome"] == "verified_noop"
     assert out["verified"][1]["outcome"] == "verified_change"
+
+
+# --- coverage claims -------------------------------------------------------
+
+from mcp_vroid.driver.inventory import coverage_report  # noqa: E402
+from mcp_vroid.driver.scope import load_catalog  # noqa: E402
+
+
+def _body_rows(skip=()):
+    rows = []
+    for r in load_catalog():
+        if r["section"] == "Body" and r["control_set"] == "Whole Body" and r["numeric_entry"]:
+            if r["label"] in skip:
+                continue
+            rows.append(ObservedRow(r["label"], "0.000", 100 + 40 * len(rows), "slider", True,
+                                    page=0, shot="p0.png"))
+    return rows
+
+
+def test_coverage_max_pages_is_never_verified_even_if_everything_was_seen():
+    cov = coverage_report("Body", "Whole Body", _body_rows(), "max_pages", 24, 24)
+    assert cov["termination"] == "max_pages"
+    assert cov["verified"] is False
+    assert cov["catalog"]["missing"] == []
+    assert [e["kind"] for e in cov["end_evidence"]] == ["all_catalogued_labels_observed"]
+
+
+def test_coverage_unchanged_frame_is_weak_evidence_and_needs_catalog_corroboration():
+    cov = coverage_report("Body", "Whole Body", _body_rows(), "unchanged_panel", 3, 24)
+    kinds = [e["kind"] for e in cov["end_evidence"]]
+    assert kinds == ["frame_unchanged_after_wheel", "all_catalogued_labels_observed"]
+    assert [e["strength"] for e in cov["end_evidence"]] == ["weak", "corroborating"]
+    assert cov["verified"] is True
+    assert cov["claim"].startswith("verified")
+
+
+def test_coverage_missing_catalog_label_is_partial():
+    cov = coverage_report("Body", "Whole Body", _body_rows(skip=("Chest Size",)),
+                          "unchanged_panel", 3, 24)
+    assert cov["verified"] is False
+    assert cov["catalog"]["missing"] == ["Chest Size"]
+    assert cov["claim"].startswith("partial")
+
+
+def test_coverage_problematic_rows_block_the_verified_claim_but_are_kept():
+    rows = _body_rows()
+    rows[0].duplicate = True
+    rows[1].value_conflict = True
+    cov = coverage_report("Body", "Whole Body", rows, "panel_end_visible", 1, 24)
+    assert cov["verified"] is False
+    assert cov["problematic"]["duplicate"] == 1
+    assert cov["problematic"]["value_conflict"] == 1
+    assert cov["catalog"]["missing"] == []          # they were observed, just not clean
+
+
+def test_export_params_carries_coverage_and_problem_lists():
+    rows = _body_rows()
+    rows[0].duplicate = True
+    inv = __import__("mcp_vroid.driver.inventory", fromlist=["build_inventory"]).build_inventory(
+        "Body", "Whole Body", "Whole Body", [rows], rows, "unchanged_panel", 24)
+    with patch("mcp_vroid.driver.manifest.INV.inventory_section", return_value=inv):
+        man = M.export_params("Body", "Whole Body")
+    assert man["inventory"]["coverage"]["verified"] is False
+    assert len(man["duplicates"]) == 1
+    assert rows[0].label not in man["parameters"]     # duplicate never becomes a restore value

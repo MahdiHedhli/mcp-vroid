@@ -326,14 +326,91 @@ def inventory_section(section: str, max_pages: int = 24,
         stop_reason = "max_pages"
 
     merged = merge_pages(pages)
+    return build_inventory(section, cs, subsection, pages, merged, stop_reason, max_pages)
+
+
+def coverage_report(section: str, control_set: str | None,
+                    merged: list[ObservedRow], stop_reason: str,
+                    pages_scanned: int, max_pages: int) -> dict:
+    """Separate *why the scan stopped* from *what supports coverage*.
+
+    termination            the loop's stop reason, nothing more
+    end_evidence           what, if anything, independently supports having
+                           seen the whole list. An unchanged frame after a
+                           wheel event is a UI response, not proof; it is
+                           listed as "weak". max_pages is no evidence at all.
+    catalog                corroboration against the capability catalog for
+                           this scope: which catalogued numeric labels were
+                           observed, which were not. The catalog itself was
+                           derived from earlier OCR crawls, so agreement is
+                           corroboration, not ground truth.
+    problematic            counts of observations a caller must not treat as
+                           clean values (all rows are also kept in full).
+    verified               True only when termination was not max_pages AND
+                           every catalogued numeric label was observed AND no
+                           row is problematic. Anything else is "within
+                           demonstrated coverage" only.
+    """
+    from .scope import load_catalog
+    want = _norm_pair(section, control_set)
+    cat_labels = []
+    for row in load_catalog():
+        if _norm_pair(row.get("section"), row.get("control_set")) == want \
+                and row.get("numeric_entry"):
+            cat_labels.append(row["label"])
+    observed_keys = {r.key() for r in merged}
+    missing = [l for l in cat_labels if L._norm(l) not in observed_keys]
+    cat_keys = {L._norm(l) for l in cat_labels}
+    extra = [r.label for r in merged if r.numeric_entry and r.key() not in cat_keys]
+
+    if stop_reason == "max_pages":
+        end_evidence = []
+    elif stop_reason == "panel_end_visible":
+        end_evidence = [{"kind": "last_row_above_bottom_on_first_page", "strength": "weak"}]
+    elif stop_reason == "unchanged_panel":
+        end_evidence = [{"kind": "frame_unchanged_after_wheel", "strength": "weak"}]
+    else:
+        end_evidence = []
+    if cat_labels and not missing:
+        end_evidence.append({"kind": "all_catalogued_labels_observed",
+                             "strength": "corroborating", "count": len(cat_labels)})
+
+    problematic = {
+        "duplicate": sum(1 for r in merged if r.duplicate),
+        "value_conflict": sum(1 for r in merged if r.value_conflict),
+        "unreadable_value": sum(1 for r in merged
+                                if r.value is not None and r.control == "unknown"),
+        "no_value": sum(1 for r in merged if r.value is None),
+    }
+    verified = (stop_reason != "max_pages" and bool(cat_labels) and not missing
+                and not any(problematic.values()))
+    return {
+        "termination": stop_reason,
+        "pages_scanned": pages_scanned,
+        "max_pages": max_pages,
+        "end_evidence": end_evidence,
+        "catalog": {"expected_numeric": len(cat_labels), "observed": len(cat_labels) - len(missing),
+                    "missing": missing, "extra_observed": extra},
+        "problematic": problematic,
+        "verified": verified,
+        "claim": ("verified within catalogue" if verified
+                  else "partial: compare only within demonstrated coverage"),
+    }
+
+
+def _norm_pair(section, control_set) -> tuple[str, str]:
+    return (L._norm(str(section or "")), L._norm(str(control_set or "")))
+
+
+def build_inventory(section: str, cs: str | None, subsection: str | None,
+                    pages: list[list[ObservedRow]], merged: list[ObservedRow],
+                    stop_reason: str, max_pages: int) -> dict:
     duplicates = [asdict(r) for r in merged if r.duplicate]
     unreadable = [asdict(r) for r in merged
                   if r.value_conflict or (r.control == "unknown" and r.value is not None)]
     unmapped = [asdict(r) for r in merged if r.value is None]
-    # Coverage is demonstrated only when the crawl observed the list end:
-    # either the whole list fit on the first page or scrolling stopped
-    # changing the panel. Hitting max_pages proves nothing.
-    complete = stop_reason in ("panel_end_visible", "unchanged_panel")
+    coverage = coverage_report(section, cs, merged, stop_reason, len(pages), max_pages)
+    coverage["shots"] = [pg[0].shot for pg in pages if pg]
     return {
         "schema_version": 1,
         "vroid_version": "2.14.0",
@@ -343,14 +420,7 @@ def inventory_section(section: str, max_pages: int = 24,
         "stop_reason": stop_reason,
         "pages_scanned": len(pages),
         "count": len(merged),
-        "coverage": {
-            "complete": complete,
-            "reason": stop_reason,
-            "pages_scanned": len(pages),
-            "max_pages": max_pages,
-            "shots": [r.shot for r in (pages[0] if pages else [])][:1]
-                     + [pg[0].shot for pg in pages[1:] if pg],
-        },
+        "coverage": coverage,
         "duplicates": duplicates,
         "unreadable": unreadable,
         "unmapped": unmapped,
