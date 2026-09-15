@@ -156,18 +156,34 @@ def parse_panel(matches: list[L.Match],
     return rows
 
 
+def _caption_similar(a: str | None, b: str | None) -> bool | None:
+    """Fuzzy caption equality tolerant of OCR noise at a page edge.
+
+    "ar} Eyebrows Length" (scrollbar glyph glued to the caption) and
+    "Eyebrows Length" are the same neighbour. Returns None when either side
+    is absent (clipped at the page edge).
+    """
+    if not a or not b:
+        return None
+    na, nb = L._norm(a), L._norm(b)
+    if na == nb:
+        return True
+    short, long_ = (na, nb) if len(na) <= len(nb) else (nb, na)
+    return len(short) >= 4 and short in long_
+
+
 def _same_context(a: ObservedRow, b: ObservedRow) -> bool | None:
-    """True/False when both rows carry neighbour captions; None when unknown."""
+    """True when at least one shared neighbour caption agrees, False when
+    every comparable neighbour disagrees, None when nothing is comparable."""
     if a.prev_label is None and a.next_label is None:
         return None
     if b.prev_label is None and b.next_label is None:
         return None
-    na = (L._norm(a.prev_label or ""), L._norm(a.next_label or ""))
-    nb = (L._norm(b.prev_label or ""), L._norm(b.next_label or ""))
-    # Overlapping pages clip one neighbour at the page edge; require the
-    # neighbours that are present on both sides to agree.
-    agree = [x == y for x, y in zip(na, nb) if x and y]
-    return all(agree) if agree else None
+    votes = [v for v in (_caption_similar(a.prev_label, b.prev_label),
+                         _caption_similar(a.next_label, b.next_label)) if v is not None]
+    if not votes:
+        return None
+    return any(votes)
 
 
 def merge_pages(pages: list[list[ObservedRow]]) -> list[ObservedRow]:

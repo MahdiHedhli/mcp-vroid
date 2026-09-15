@@ -338,3 +338,26 @@ def test_export_params_carries_coverage_and_problem_lists():
     assert man["inventory"]["coverage"]["verified"] is False
     assert len(man["duplicates"]) == 1
     assert rows[0].label not in man["parameters"]     # duplicate never becomes a restore value
+
+
+def test_overlap_reread_with_noisy_neighbour_caption_is_merged_not_duplicated():
+    """Gate B pre-inventory: 'ar} Eyebrows Length' vs 'Eyebrows Length' is the
+    same neighbour; Eyebrows Arch on pages 0 and 1 is one control."""
+    p0 = [_orow("Eyebrows Arch", "0.100", 0, 1811, "Rotate Eyebrows (Y)", "ar} Eyebrows Length"),
+          _orow("Nose Size", "0.000", 0, 1951, "ar} Eyebrows Length", "Nose Width"),
+          _orow("Nose Size", "1.000", 0, 2161, "Nose Tip Position (Y)", "Nose Bridge Prominence")]
+    p1 = [_orow("Eyebrows Arch", "0.100", 1, 1411, "Rotate Eyebrows (Y)", "Eyebrows Length"),
+          _orow("Nose Size", "0.000", 1, 1551, "Eyebrows Length", "Nose Width")]
+    merged = merge_pages([p0, p1])
+    arch = [r for r in merged if r.key() == "eyebrowsarch"]
+    assert len(arch) == 1 and arch[0].duplicate is False and arch[0].seen_on_pages == [0, 1]
+    sizes = [r for r in merged if r.key() == "nosesize"]
+    assert len(sizes) == 2 and all(r.duplicate for r in sizes)
+    assert sizes[0].seen_on_pages == [0, 1] and sizes[1].seen_on_pages == [0]
+
+
+def test_overlap_reread_where_both_neighbours_disagree_stays_duplicate():
+    p0 = [_orow("Nose Size", "0.000", 0, 2000, "Eyebrows Length", "Nose Width")]
+    p1 = [_orow("Nose Size", "0.000", 1, 400, "Nose Tip Position (Y)", "Nose Bridge Prominence")]
+    merged = merge_pages([p0, p1])
+    assert len(merged) == 2 and all(r.duplicate for r in merged)
