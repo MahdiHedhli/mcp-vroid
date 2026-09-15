@@ -75,6 +75,17 @@ immediately after `activate`.
 * Hyprland workspace parking is a no-op; `vroid_release` does not hide VRoid.
 * Capture uses `screencapture`, not the obsolete `CGWindowListCreateImage`.
 
+## Parameter inventory
+
+`vroid_inventory(section="Body")` OCRs the Parameters panel without typing
+values. On the 1410×2295 native window the Whole Body list fits in one
+frame; scrolling is skipped when the last row is above 88% of window
+height. A second unchanged-panel check covers longer lists.
+
+English labels are **not** stored as plaintext in `data.unity3d` (UTF-8 or
+UTF-16LE). Schema files under `schema/vroid-2.14/` record labels and
+control types only — never a character's current numbers.
+
 ## Upstream notes
 
 Safe to propose as an additive PR:

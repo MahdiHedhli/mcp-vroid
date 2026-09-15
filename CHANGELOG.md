@@ -23,6 +23,13 @@ follow [semantic versioning](https://semver.org/).
   values such as `0.850`.
 * `python-xlib` is Linux-only; PyObjC frameworks are Darwin-only.
 
+### Added (inventory)
+
+* Read-only `vroid_inventory` and `schema/vroid-2.14/body.json` (labels and
+  control types only — not character values). Generic `vroid_export_params`,
+  `vroid_plan_params`, `vroid_apply_params`; apply aborts before mutation if
+  any label is unresolved.
+
 ## [0.1.0] — 2026-08-24
 
 First public release.

@@ -41,6 +41,8 @@ _FILLED_ENV = ensure_session_env()
 from .driver import actions as A  # noqa: E402
 from .driver import capture as C  # noqa: E402
 from .driver import input as I  # noqa: E402
+from .driver import inventory as INV  # noqa: E402
+from .driver import manifest as M  # noqa: E402
 from .driver import locate as L  # noqa: E402
 from .driver import window as W  # noqa: E402
 from .driver.paths import CAPTURES, OUT, VPOINTER  # noqa: E402
@@ -727,6 +729,91 @@ async def vroid_open_tab(
         _ensure_ready()
         shot = A.open_tab(name)
         return {"tab": name, "capture": str(shot.path)}
+
+    return await _blocking(work)
+
+
+@server.tool()
+async def vroid_inventory(
+    section: Annotated[
+        str,
+        Field(description="Top-level editor tab to crawl: Face, Hairstyle, "
+                          "Body, Outfit, Accessories, or Look."),
+    ],
+) -> dict[str, Any]:
+    """Read-only crawl of a Parameters panel: labels, values, control types.
+
+    Opens the tab, scrolls from the top until the panel stops changing, and
+    OCR-merges overlapping pages. Does not click numeric boxes or type
+    values, so the character is not modified. Duplicate labels that differ
+    only by X/Y/Z are kept distinct.
+    """
+
+    def work() -> dict[str, Any]:
+        _ensure_ready()
+        return INV.inventory_section(section)
+
+    return await _blocking(work)
+
+
+@server.tool()
+async def vroid_export_params(
+    section: Annotated[
+        str,
+        Field(description="Editor tab to export: Face, Body, …"),
+    ],
+) -> dict[str, Any]:
+    """Read current numeric parameters in a section into a manifest.
+
+    Does not change any value. Instance values are the open character, not
+    VRoid defaults.
+    """
+
+    def work() -> dict[str, Any]:
+        _ensure_ready()
+        return M.export_params(section)
+
+    return await _blocking(work)
+
+
+@server.tool()
+async def vroid_plan_params(
+    manifest: Annotated[
+        dict[str, Any],
+        Field(description="A {schema_version, vroid_version, section, "
+                          "parameters:{label: number}} document."),
+    ],
+) -> dict[str, Any]:
+    """Compare the open UI to a manifest. Makes no changes.
+
+    Unresolved or non-numeric labels are reported; would_mutate is false
+    unless every label resolves.
+    """
+
+    def work() -> dict[str, Any]:
+        _ensure_ready()
+        return M.plan_params(manifest)
+
+    return await _blocking(work)
+
+
+@server.tool()
+async def vroid_apply_params(
+    manifest: Annotated[
+        dict[str, Any],
+        Field(description="Manifest to apply. Aborts before any slider is "
+                          "written if a label cannot be resolved."),
+    ],
+) -> dict[str, Any]:
+    """Apply a parameter manifest via vroid_set_slider's set_param path.
+
+    Resolves every label first. On a miss, returns aborted=true and does
+    not mutate. Originals are returned for rollback.
+    """
+
+    def work() -> dict[str, Any]:
+        _ensure_ready()
+        return M.apply_params(manifest)
 
     return await _blocking(work)
 

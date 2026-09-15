@@ -28,6 +28,7 @@ from pathlib import Path
 from . import actions as A
 from . import capture as C
 from . import input as I
+from . import inventory as INV
 from . import locate as L
 from . import window as W
 
@@ -64,6 +65,7 @@ def main(argv=None) -> int:
     sp = sub.add_parser("key"); sp.add_argument("name"); sp.add_argument("--mods", default="")
     sp = sub.add_parser("scroll"); sp.add_argument("ticks", type=int)
     sp = sub.add_parser("tab"); sp.add_argument("name")
+    sp = sub.add_parser("inventory"); sp.add_argument("section")
     sp = sub.add_parser("slider")
     sp.add_argument("label"); sp.add_argument("value", type=float)
     sp = sub.add_parser("new-character"); sp.add_argument("base", nargs="?", default="Fem")
@@ -133,6 +135,9 @@ def main(argv=None) -> int:
         I.scroll(a.ticks)
     elif a.cmd == "tab":
         print(A.open_tab(a.name).path)
+        return 0
+    elif a.cmd == "inventory":
+        print(json.dumps(INV.inventory_section(a.section), indent=2))
         return 0
     elif a.cmd == "slider":
         print(A.set_slider(a.label, a.value).path)
