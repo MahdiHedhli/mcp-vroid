@@ -50,6 +50,26 @@ def test_find_label_distinguishes_x_and_y():
     assert x.center[1] != y.center[1]
 
 
+def test_find_param_default_covers_face_sets_length():
+    """lyra-sculpt-0002: max_pages=10 never reached Sunken Cheeks (~page 11+)."""
+    assert A.find_param.__defaults__[0] >= 14
+
+
+def test_value_click_x_uses_numeric_chip():
+    """Click the OCR'd number, not the 0.9785 scrollbar x from the 2560 layout."""
+    s = _shot()
+    m = _m("Nose", 1130, 2017)
+
+    def fake_all_text(img, **kw):
+        # crop is 0.90*1410=1269 wide-origin; chip at abs x=1357 -> local 88
+        return [_m("0.167", 88, 16)]
+
+    with patch("mcp_vroid.driver.actions.L.all_text", side_effect=fake_all_text):
+        x = A._value_click_x(s, m)
+    assert abs(x - (int(1410 * 0.90) + _m("0.167", 88, 16).center[0])) <= 1
+    assert x < int(1410 * 0.9785)
+
+
 def test_find_label_head_tip_y_keeps_axis_token():
     rows = {
         "Head": [_m("Head", 1130, 400), _m("Head", 1130, 500)],

@@ -252,6 +252,13 @@ def _remap_spare(ks: int) -> int:
     return code
 
 
+def type_field_value(text: str) -> None:
+    """Select-all, type `text`, Return — Wayland already has a working path."""
+    clear_field()
+    type_text(text)
+    key("Return")
+
+
 def type_text(text: str, delay_ms: int = 22) -> None:
     """Type a literal string into the focused widget (XTEST)."""
     _guard()

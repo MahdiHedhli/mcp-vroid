@@ -183,18 +183,24 @@ def inventory_from_shot(s: Shot) -> list[ObservedRow]:
 
 
 def inventory_section(section: str, max_pages: int = 24,
-                      stagnant_limit: int = 2) -> dict:
-    """Open `section`, OCR the Parameters panel, scroll only if needed.
+                      stagnant_limit: int = 2,
+                      control_set: str | None = None) -> dict:
+    """Open `section` + control set, OCR the Parameters panel, scroll only if needed.
 
     Does not click numeric boxes or type values.
     """
-    A.open_tab(section)
+    from .scope import control_set_of, DEFAULT_CONTROL_SET
+    cs = control_set or DEFAULT_CONTROL_SET.get(section)
+    A.navigate_scope(section, cs)
     time.sleep(0.4)
     subsection = None
     try:
         subsection = A._panel_title(C.grab_window(tag=f"inv-{section}-title")) or None
     except Exception:
         subsection = None
+    if cs and subsection and L._norm(cs) not in L._norm(subsection):
+        raise RuntimeError(
+            f"expected control set {cs!r} in {section!r}, panel title {subsection!r}")
 
     s = C.grab_window(tag=f"inv-{section}-top")
     # Jump to top once; skip if the first page already shows the list end.
@@ -245,7 +251,8 @@ def inventory_section(section: str, max_pages: int = 24,
         "schema_version": 1,
         "vroid_version": "2.14.0",
         "section": section,
-        "subsection": subsection,
+        "control_set": cs or subsection,
+        "subsection": subsection or cs,
         "stop_reason": stop_reason,
         "pages_scanned": len(pages),
         "count": len(merged),

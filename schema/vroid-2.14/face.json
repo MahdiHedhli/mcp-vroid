@@ -1,0 +1,460 @@
+{
+  "schema_version": 1,
+  "vroid_version": "2.14.0",
+  "section": "Face",
+  "control_set": "Face Sets",
+  "subsection": "Face Sets",
+  "note": "Labels and control types only. Not factory defaults. Not a character preset.",
+  "parameters": [
+    {
+      "label": "Eye Size X",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Eye Size Y",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Eyes Position (Y)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Eyes Position (X)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Rotate Eye Socket",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Inner Eye Slant (Y)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Reduce Inner Slant",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Outer Eye Slant (Y)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Straighten Upper Eyelid",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Straighten Lower Eyelid",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Move Upper Eyelid Down",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Move Lower Eyelid Up",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Scornful Look",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Droopy Eyes",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Lower Eyelashes Tips",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Iris Size (X)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Iris Size (Y)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Gaze (Y)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Gaze Distance",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Eyebrows Tilt",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Eyebrows Position (Y)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Eyebrows Position (X)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Eyebrows Position (Z)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Rotate Eyebrows (Y)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Eyebrows Arch",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Eyebrows Length",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Nose Size",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Nose Width",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Nose Tip Position (Y)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Nose Bridge Prominence",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Nose Bridge Width",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Nose Bridge Curve",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Nose Size Scale",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Nose Base Prominence",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Mouth Width",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Mouth Position (Y)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Mouth Corners",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Mouth (Z)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Thinner Lips",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Thicker Upper Lip (Fem)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Thicker Lower Lip (Fem)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Thicker Upper Lip (Masc)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Thicker Lower Lip (Masc)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Vampire Teeth (Lip)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Vampire Tooth (Skin, Right)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Vampire Tooth (Skin, Left)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Hide Teeth",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Hide Teeth (Lower)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Hide Teeth (Upper)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Vampire Teeth",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Vampire Teeth (Lower)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Vampire Teeth (Upper)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Shark Teeth",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Shark Teeth (Lower)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Shark Teeth (Upper)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Front Teeth Fang",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Front Teeth Fang (Lower)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Front Teeth Fang (Upper)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Teeth Shrink",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Teeth Shrink (Lower)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Teeth Shrink (Upper)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Ear Size",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Ear Tip (Y)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Ear Stretch",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Ear Prominence",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Rounder Ears",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Remove Ears",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Jaw Position (Y)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Cheekbones Position (Z)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Sunken Cheeks",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Chin Roundness",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Jawline Position (Y)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Chin Length",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Chin Tip Position (Z)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Chin Width",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Jaw Angle (Increase)",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Fem Face",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Masc Face",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Fem Eyes",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Masc Eyes",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Fem Eyebrows",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Masc Eyebrows",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Fem Nose",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Masc Nose",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Fem Mouth",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Masc Mouth",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Fem Outlines",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Masc Outlines",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Fem Head",
+      "control": "slider",
+      "numeric_entry": true
+    },
+    {
+      "label": "Masc Head",
+      "control": "slider",
+      "numeric_entry": true
+    }
+  ]
+}

@@ -241,6 +241,31 @@ def _vk(name: str) -> int:
     return key
 
 
+def type_field_value(text: str) -> None:
+    """Type `text` into the focused Unity numeric field and commit.
+
+    HID+PostToPid keystrokes double or land in the CLI host. A single
+    System Events block keeps VRoid Studio the key app for the whole edit.
+    """
+    import subprocess
+    escaped = str(text).replace("\\", "\\\\").replace('"', '\\"')
+    script = f'''
+    tell application "VRoid Studio" to activate
+    delay 0.2
+    tell application "System Events"
+      keystroke "a" using command down
+      delay 0.05
+      keystroke "{escaped}"
+      delay 0.05
+      keystroke return
+    end tell
+    '''
+    r = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    if r.returncode != 0:
+        raise RuntimeError(f"osascript type_field_value failed: {r.stderr.strip()}")
+    time.sleep(0.15)
+
+
 def type_text(text: str, delay_ms: int = 22) -> None:
     """Type a literal string into the focused widget (Quartz keycodes)."""
     _guard()

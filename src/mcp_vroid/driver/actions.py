@@ -19,7 +19,9 @@ from .paths import OUT
 # different monitor/scale. Measured on 2560x1440 (Hyprland scale 1.25).
 F_CLOSE_X = (0.0090, 0.0160)      # top-left "x" that leaves a full-screen view
 F_EXPORT_ICON = (0.9625, 0.0160)  # share/upload icon in the editor toolbar
-F_PARAM_VALUE_X = 0.9785          # x of the numeric box on a Parameters row
+F_PARAM_VALUE_X = 0.962           # numeric chip center on the 1410-px macOS editor
+                                  # (0.9785 was measured on 2560-px Linux and lands
+                                  # past the chip / on the scrollbar here)
 TAB_Y = 0.0160                    # y of the Face/Hairstyle/... tab strip
 
 TABS = ("Face", "Hairstyle", "Body", "Outfit", "Accessories", "Look")
@@ -118,6 +120,29 @@ def open_tab(name: str) -> Shot:
     return shot(f"tab-{name.lower()}")
 
 
+def navigate_scope(section: str, control_set: str | None = None) -> Shot:
+    """Open a top-level tab and select the left-rail control set.
+
+    Verifies the panel title before returning. Does not click sliders.
+    """
+    from .scope import DEFAULT_CONTROL_SET, control_set_of
+    cs = control_set or DEFAULT_CONTROL_SET.get(section)
+    s = open_tab(section)
+    if not cs:
+        return s
+    title = _panel_title(s)
+    if L._norm(cs) in L._norm(title or ""):
+        return s
+    if section == "Face":
+        return face_category(cs)
+    if section == "Hairstyle":
+        return hair_category(cs)
+    if section == "Body":
+        return body_category(cs)
+    raise RuntimeError(
+        f"control set {cs!r} not selected in {section!r} (title={title!r})")
+
+
 def find_param_row(label: str, s: Shot | None = None):
     """(shot, Match) for a Parameters label in the right-hand panel."""
     s = s or shot()
@@ -135,12 +160,7 @@ def set_slider(label: str, value: float, s: Shot | None = None) -> Shot:
     s, m = find_param_row(label, s)
     if m is None:
         raise RuntimeError(f"no parameter row labelled {label!r}")
-    x = int(s.image.width * F_PARAM_VALUE_X)
-    I.click(x, m.center[1], space="image", shot=s)
-    time.sleep(0.3)
-    I.clear_field()
-    I.type_text(f"{value:.3f}")
-    I.key("Return")
+    _type_value(s, m, value)
     time.sleep(1.0)
     return shot(f"slider-{L._norm(label)}")
 
@@ -472,44 +492,106 @@ def _find_label(s: Shot, label: str):
     return None
 
 
-def find_param(label: str, max_pages: int = 10):
-    """Scroll the Parameters panel from the top until `label` is visible.
-    Returns (shot, Match) with the row in a safe (not edge-clipped) place."""
-    s = shot()
-    scroll_panel(-80, s)
-    time.sleep(0.4)
-    for _ in range(max_pages):
-        s = shot(f"find-{L._norm(label)}")
-        m = _find_label(s, label)
-        if m and m.center[1] < s.image.height * 0.93:
-            return s, m
-        scroll_panel(8, s)
-        time.sleep(0.5)
-    raise RuntimeError(f"parameter {label!r} not found in the panel")
-
-
-def set_param(label: str, value: float) -> Shot:
-    """Scroll to a Parameters row and type `value` into its numeric box."""
-    s, m = find_param(label)
-    x = int(s.image.width * F_PARAM_VALUE_X)
-    I.click(x, m.center[1], space="image", shot=s)
-    time.sleep(0.3)
-    I.clear_field()
-    I.type_text(f"{value:.3f}")
-    I.key("Return")
-    time.sleep(0.8)
-    s2 = shot(f"param-{L._norm(label)}")
-    return s2
-
-
-def read_param(label: str) -> str:
-    """OCR the numeric box of a row (after find_param)."""
-    s, m = find_param(label)
+def _ocr_value(s: Shot, m) -> str:
+    """OCR the numeric chip of a parameter row already located in `s`."""
     w = s.image.width
     # Wide enough for a 1410-px macOS editor as well as the 2560-px Linux layout.
     box = s.crop((int(w * 0.90), m.center[1] - 16, int(w * 0.995), m.center[1] + 16))
     ms = L.all_text(box)
     return " ".join(t.text for t in ms)
+
+
+def _value_click_x(s: Shot, m) -> int:
+    """Image-x of the numeric chip on the same row as `m`.
+
+    Prefer the OCR'd number so we don't click the scrollbar. Fall back to
+    F_PARAM_VALUE_X when the chip isn't readable yet.
+    """
+    w = s.image.width
+    x0 = int(w * 0.90)
+    box = s.crop((x0, m.center[1] - 16, int(w * 0.995), m.center[1] + 16))
+    nums = [t for t in L.all_text(box) if any(c.isdigit() for c in t.text)]
+    if nums:
+        t = max(nums, key=lambda x: x.left)
+        return x0 + t.center[0]
+    return int(w * F_PARAM_VALUE_X)
+
+
+def find_param(label: str, max_pages: int = 24, from_top: bool = True):
+    """Scroll the Parameters panel until `label` is visible.
+
+    Returns (shot, Match) with the row in a safe (not edge-clipped) place.
+    Face Sets on VRoid 2.14 is ~14 scroll pages; 10 was not enough to reach
+    jaw/cheek/chin rows such as Sunken Cheeks.
+
+    Always inspects the current page first so a just-written row does not
+    require another top-to-bottom hunt. `from_top=False` keeps walking down
+    (sequential applies in panel order).
+    """
+    s = shot()
+    m = _find_label(s, label)
+    if m:
+        if m.center[1] >= s.image.height * 0.90:
+            scroll_panel(3, s)
+            time.sleep(0.35)
+            s = shot(f"find-{L._norm(label)}")
+            m = _find_label(s, label) or m
+        if m.center[1] < s.image.height * 0.93:
+            return s, m
+    if from_top:
+        scroll_panel(-80, s)
+        time.sleep(0.4)
+    for _ in range(max_pages):
+        s = shot(f"find-{L._norm(label)}")
+        m = _find_label(s, label)
+        if m:
+            # A large wheel tick from the clipped bottom edge can skip the row.
+            if m.center[1] >= s.image.height * 0.90:
+                scroll_panel(3, s)
+                time.sleep(0.35)
+                s = shot(f"find-{L._norm(label)}")
+                m = _find_label(s, label) or m
+            if m.center[1] < s.image.height * 0.93:
+                return s, m
+        scroll_panel(8, s)
+        time.sleep(0.5)
+    raise RuntimeError(f"parameter {label!r} not found in the panel")
+
+
+def _type_value(s: Shot, m, value: float) -> None:
+    """Click the numeric chip then type `value` via the platform field helper."""
+    x = _value_click_x(s, m)
+    y = m.center[1]
+    I.set_safety(False)
+    try:
+        I.click(x, y, space="image", shot=s)
+    finally:
+        I.set_safety(True)
+    time.sleep(0.12)
+    I.type_field_value(f"{value:.3f}")
+
+
+def set_param(label: str, value: float, from_top: bool = True) -> Shot:
+    """Scroll to a Parameters row and type `value` into its numeric box."""
+    s, m = find_param(label, from_top=from_top)
+    _type_value(s, m, value)
+    time.sleep(0.8)
+    s2 = shot(f"param-{L._norm(label)}")
+    return s2
+
+
+def read_param(label: str, s: Shot | None = None) -> str:
+    """OCR the numeric box of a row.
+
+    If `s` already shows the row (the shot returned by set_param), skip a
+    second top-to-bottom search — that re-scroll is what lost Sunken Cheeks.
+    """
+    if s is not None:
+        m = _find_label(s, label)
+        if m:
+            return _ocr_value(s, m)
+    s, m = find_param(label)
+    return _ocr_value(s, m)
 
 
 def set_color_param(label: str, hexcode: str) -> Shot:
@@ -643,6 +725,27 @@ HAIR_RAIL_HINT_Y = {          # image px on a 2560x1440 capture (Hairstyle tab)
     "Extensions": 269, "Side": 317, "Ahoge": 365, "Extra": 412,
     "Hair Base": 461,
 }
+
+
+BODY_RAIL_HINT_Y = {          # image px on a 2560x1440 capture (Body tab)
+    "Whole Body": 80,
+}
+
+
+def body_category(name: str) -> Shot:
+    """Select a Body-tab left-rail sub-category by panel title."""
+    hint = BODY_RAIL_HINT_Y.get(name)
+    ys = [hint] if hint else []
+    ys += [y for y in range(80, 400, 25) if y not in ys]
+    for y in ys:
+        s = shot()
+        I.click(int(24 * s.image.width / 2560), int(y * s.image.height / 1440),
+                space="image", shot=s)
+        time.sleep(1.2)
+        s = shot(f"body-cat-{L._norm(name)}")
+        if L._norm(name) in L._norm(_panel_title(s)):
+            return s
+    raise RuntimeError(f"body category {name!r} not found on the rail")
 
 
 def hair_category(name: str) -> Shot:

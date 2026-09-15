@@ -21,6 +21,17 @@ follow [semantic versioning](https://semver.org/).
   matched as `Eye Size Y`. Linux benefits from the same fix.
 * `read_param` uses a wider numeric-box crop so non-2560 layouts still OCR
   values such as `0.850`.
+* `find_param` default `max_pages` is 24 (Face Sets is ~14 pages). A label
+  on the clipped bottom edge is nudged up instead of skipped. `read_param`
+  can OCR the shot returned by `set_param` without re-scrolling from the top.
+* `set_param` clicks the OCR'd numeric chip (not a 2560-px-only x-fraction).
+  On macOS, the value is typed through a single System Events keystroke
+  block so Unity actually receives the digits (HID+PostToPid doubled or
+  landed in the CLI host).
+* Parameter addresses are `(section, control_set, label)`. Inventory, plan,
+  and apply navigate Face → Face Sets / Body → Whole Body before resolving
+  labels. `plan_many` resolves every manifest before any `set_param`.
+  Capability catalogs: `schema/vroid-2.14/face.json`, `body.json`.
 * `python-xlib` is Linux-only; PyObjC frameworks are Darwin-only.
 
 ### Added (inventory)

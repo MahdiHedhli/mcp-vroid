@@ -8,6 +8,12 @@ in a per-character manifest owned by the caller (for example a Lyra
 Discovered by read-only OCR of the Parameters panel on native VRoid Studio
 2.14.0 (English). No `data.bin` / executable reverse engineering.
 
-`body.json` lists Whole Body slider labels. Ranges and factory defaults are
-not published in app resources (UTF-8/UTF-16 scans of `data.unity3d` found
-none of these English strings).
+A parameter address is `(section, control_set, label)`, not a label alone.
+`Sunken Cheeks` is Face → Face Sets; `Chest Size` is Body → Whole Body.
+`control_set` is the left-rail subcategory (legacy inventories used
+`subsection` for the same field).
+
+`body.json` lists Whole Body slider labels. `face.json` lists Face Sets
+slider labels. Ranges and factory defaults are not published in app
+resources (UTF-8/UTF-16 scans of `data.unity3d` found none of these
+English strings).

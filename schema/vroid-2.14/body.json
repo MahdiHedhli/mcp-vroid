@@ -2,6 +2,7 @@
   "schema_version": 1,
   "vroid_version": "2.14.0",
   "section": "Body",
+  "control_set": "Whole Body",
   "subsection": "Whole Body",
   "note": "Labels and control types only. Not factory defaults. Not a character preset.",
   "parameters": [
