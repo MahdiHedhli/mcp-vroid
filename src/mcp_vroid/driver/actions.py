@@ -26,6 +26,27 @@ TAB_Y = 0.0160                    # y of the Face/Hairstyle/... tab strip
 
 TABS = ("Face", "Hairstyle", "Body", "Outfit", "Accessories", "Look")
 
+# Window-relative centre of each top-level tab label, VRoid Studio 2.14.0
+# native macOS, measured on a 1410x2295 window. Identical to 5 decimal
+# places across three independent captures taken at different points in a
+# session (see docs/top-tab-navigation.md) -- this is a static layout, not
+# a per-frame OCR read.
+TOP_TAB_FRAC: dict[str, tuple[float, float]] = {
+    "Face":        (0.0688, 0.0222),
+    "Hairstyle":   (0.1404, 0.0227),
+    "Body":        (0.2142, 0.0227),
+    "Outfit":      (0.2780, 0.0218),
+    "Accessories": (0.3610, 0.0218),
+    "Look":        (0.4404, 0.0218),
+}
+# The active tab underlines itself with VRoid's accent blue at this
+# y-fraction; its x-centre matches TOP_TAB_FRAC[name][0] to within a few
+# thousandths. This lives well below the macOS title bar, so unlike
+# text OCR of the tab strip it is unaffected by the title bar's
+# focused/unfocused colour (see docs/top-tab-navigation.md, root cause).
+TOP_TAB_UNDERLINE_Y = 0.0318
+TOP_TAB_UNDERLINE_TOL = 0.02   # x-fraction tolerance when matching the blob to `name`
+
 
 def shot(tag: str = "") -> Shot:
     return C.grab_window(tag=tag)
@@ -109,15 +130,45 @@ def new_character(base: str = "Fem", timeout: float = 60.0) -> Shot:
 
 # --- editor -----------------------------------------------------------------
 
+def _tab_is_active(s: Shot, name: str) -> bool:
+    """Accent-blue underline present under `name`'s calibrated x-position.
+
+    Colour-blob based, not text OCR: proven immune to the title-bar-darkness
+    failure mode that breaks find_text on this same strip (see
+    docs/top-tab-navigation.md). Matches the blob nearest the expected
+    x-fraction, not merely "any blob in the strip" -- a tab other than
+    `name` being active must not pass.
+    """
+    fx, _ = TOP_TAB_FRAC[name]
+    w, h = s.image.width, s.image.height
+    region = (0, int(h * 0.013), min(w, int(w * 0.5)), int(h * 0.04))
+    blobs = L.find_color_blobs(s.image, region=region, min_w=15, min_h=2)
+    return any(abs(b.center[0] / w - fx) <= TOP_TAB_UNDERLINE_TOL for b in blobs)
+
+
 def open_tab(name: str) -> Shot:
+    """Click a top-level tab by its calibrated window-relative position.
+
+    Deterministic, not OCR: `find_text` on this strip is unreliable exactly
+    when VRoid is the focused/key window (dark macOS title bar skews
+    Tesseract's segmentation of the lower-contrast inactive-tab labels in
+    the same crop; see docs/top-tab-navigation.md for the reproduced root
+    cause). Fails closed -- raises rather than proceeding -- if the accent
+    underline does not confirm `name` became active after the click.
+    """
+    if name not in TOP_TAB_FRAC:
+        raise ValueError(f"unknown top-level tab {name!r}; known: {sorted(TOP_TAB_FRAC)}")
     s = shot()
-    m = L.find_text(s, name, region=(0, 0, int(s.image.width * 0.4),
-                                     int(s.image.height * 0.04)))
-    if m is None:
-        raise RuntimeError(f"tab {name!r} not found in the tab strip")
-    I.click(*m.center, space="image", shot=s)
+    fx, fy = TOP_TAB_FRAC[name]
+    x, y = int(s.image.width * fx), int(s.image.height * fy)
+    I.click(x, y, space="image", shot=s)
     time.sleep(2.0)
-    return shot(f"tab-{name.lower()}")
+    s2 = shot(f"tab-{name.lower()}")
+    if not _tab_is_active(s2, name):
+        raise RuntimeError(
+            f"tab {name!r} clicked at image ({x},{y}) but its accent "
+            f"underline was not confirmed afterward; see {s2.path}")
+    return s2
 
 
 def navigate_scope(section: str, control_set: str | None = None) -> Shot:
