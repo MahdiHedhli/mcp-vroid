@@ -146,6 +146,136 @@ def _tab_is_active(s: Shot, name: str) -> bool:
     return any(abs(b.center[0] / w - fx) <= TOP_TAB_UNDERLINE_TOL for b in blobs)
 
 
+# Outcomes open_tab_with_evidence can report in evidence["outcome"].
+NAV_ALREADY_ACTIVE = "already_active"
+NAV_FIRST_ATTEMPT_VERIFIED = "first_attempt_verified"
+NAV_LATE_VERIFIED_BEFORE_RETRY = "late_verified_before_retry"
+NAV_SECOND_ATTEMPT_VERIFIED = "second_attempt_verified"
+NAV_ABORTED_BEFORE_RETRY = "aborted_before_retry"
+NAV_FAILED_AFTER_TWO = "failed_after_two"
+
+
+def _click_tab_target(name: str, pre: Shot) -> tuple[Shot, tuple[int, int]]:
+    """One calibrated click at `name`'s position (fractions of `pre`), then
+    a fresh post-click shot. `I.click` itself is the guarded/atomic
+    activation path (`_guard` -> `assert_vroid_focused` -> `focus` if
+    needed) run immediately before the click -- unchanged here."""
+    fx, fy = TOP_TAB_FRAC[name]
+    x, y = int(pre.image.width * fx), int(pre.image.height * fy)
+    I.click(x, y, space="image", shot=pre)
+    time.sleep(2.0)
+    return shot(f"tab-{name.lower()}"), (x, y)
+
+
+def open_tab_with_evidence(name: str) -> tuple[Shot, dict]:
+    """Bounded (at most 2 clicks), verified top-level tab navigation.
+
+    Root cause of the CANARY-0001 Body-navigation failure (see
+    docs/top-tab-navigation.md and the postmortem evidence bundle): the
+    calibrated click target was correct and the click was dispatched, but
+    the accent-underline verifier correctly detected that Face, not Body,
+    remained active -- a genuine click/input miss, not a verifier defect.
+    Native F1/F2/F3 shortcuts were evaluated as an alternative (four
+    delivery-method variants, all negative -- see
+    ~/VRoid-scratch/nav-shortcut-qualification-20260916/) and deferred.
+    This is the calibrated-click design with one bounded, evidenced retry.
+
+    Sequence: already-active short-circuit -> attempt 1 -> if unverified,
+    revalidate window identity/geometry and re-check active-tab state
+    (catches a delayed redraw without spending a second click) -> at most
+    one more click -> fail closed. Never sends a third click. Verification
+    is always a fresh post-action screenshot through the unmodified
+    `_tab_is_active` colour check; a successfully dispatched click or
+    shortcut is never itself treated as success.
+
+    Returns (shot, evidence). `evidence["outcome"]` is one of:
+    already_active, first_attempt_verified, late_verified_before_retry,
+    second_attempt_verified, aborted_before_retry (window identity/geometry
+    became invalid before a second click could safely be attempted -- no
+    second click is ever sent in that case), failed_after_two. Raises
+    RuntimeError for every outcome except the first four.
+    """
+    if name not in TOP_TAB_FRAC:
+        raise ValueError(f"unknown top-level tab {name!r}; known: {sorted(TOP_TAB_FRAC)}")
+
+    evidence: dict = {"requested": name, "attempts": []}
+    s0 = shot()
+    evidence["geometry_initial"] = s0.image.size
+    evidence["initial_active"] = {t: _tab_is_active(s0, t) for t in TABS}
+
+    if _tab_is_active(s0, name):
+        evidence["outcome"] = NAV_ALREADY_ACTIVE
+        evidence["clicks"] = 0
+        return s0, evidence
+
+    post1, target1 = _click_tab_target(name, s0)
+    verified1 = _tab_is_active(post1, name)
+    evidence["attempts"].append({
+        "attempt": 1, "target": target1, "geometry": post1.image.size,
+        "verified": verified1, "capture": str(post1.path),
+        "active_tabs": {t: _tab_is_active(post1, t) for t in TABS},
+    })
+    if verified1:
+        evidence["outcome"] = NAV_FIRST_ATTEMPT_VERIFIED
+        evidence["clicks"] = 1
+        return post1, evidence
+
+    # REVALIDATE before spending the second (and last) click: reacquire the
+    # window, confirm identity/geometry are unchanged, and check whether a
+    # delayed redraw already landed on the requested tab.
+    win = W.find_window()
+    if win is None:
+        evidence["outcome"] = NAV_ABORTED_BEFORE_RETRY
+        evidence["clicks"] = 1
+        evidence["abort_reason"] = "VRoid Studio window not found during revalidation"
+        raise RuntimeError(
+            f"tab {name!r}: first click unverified and VRoid Studio window "
+            f"could not be reacquired for a bounded retry")
+
+    reval = shot(f"tab-{name.lower()}-revalidate")
+    geometry_unchanged = (win.w, win.h) == s0.image.size
+    evidence["revalidation"] = {
+        "geometry": (win.w, win.h),
+        "geometry_unchanged": geometry_unchanged,
+        "active_tabs": {t: _tab_is_active(reval, t) for t in TABS},
+        "capture": str(reval.path),
+    }
+
+    if _tab_is_active(reval, name):
+        evidence["outcome"] = NAV_LATE_VERIFIED_BEFORE_RETRY
+        evidence["clicks"] = 1
+        return reval, evidence
+
+    if not geometry_unchanged:
+        evidence["outcome"] = NAV_ABORTED_BEFORE_RETRY
+        evidence["clicks"] = 1
+        evidence["abort_reason"] = (
+            f"window geometry changed before retry (was {s0.image.size}, "
+            f"now {(win.w, win.h)})")
+        raise RuntimeError(
+            f"tab {name!r}: first click unverified and window geometry "
+            f"changed before a bounded retry could be attempted")
+
+    post2, target2 = _click_tab_target(name, reval)
+    verified2 = _tab_is_active(post2, name)
+    evidence["attempts"].append({
+        "attempt": 2, "target": target2, "geometry": post2.image.size,
+        "verified": verified2, "capture": str(post2.path),
+        "active_tabs": {t: _tab_is_active(post2, t) for t in TABS},
+    })
+    if verified2:
+        evidence["outcome"] = NAV_SECOND_ATTEMPT_VERIFIED
+        evidence["clicks"] = 2
+        return post2, evidence
+
+    evidence["outcome"] = NAV_FAILED_AFTER_TWO
+    evidence["clicks"] = 2
+    raise RuntimeError(
+        f"tab {name!r}: clicked twice (targets {target1}, {target2}) but "
+        f"its accent underline was not confirmed after either attempt; "
+        f"see {post1.path} and {post2.path}")
+
+
 def open_tab(name: str) -> Shot:
     """Click a top-level tab by its calibrated window-relative position.
 
@@ -153,22 +283,11 @@ def open_tab(name: str) -> Shot:
     when VRoid is the focused/key window (dark macOS title bar skews
     Tesseract's segmentation of the lower-contrast inactive-tab labels in
     the same crop; see docs/top-tab-navigation.md for the reproduced root
-    cause). Fails closed -- raises rather than proceeding -- if the accent
-    underline does not confirm `name` became active after the click.
+    cause). Bounded, verified retry (see `open_tab_with_evidence`): fails
+    closed after at most 2 clicks if the accent underline never confirms
+    `name` became active.
     """
-    if name not in TOP_TAB_FRAC:
-        raise ValueError(f"unknown top-level tab {name!r}; known: {sorted(TOP_TAB_FRAC)}")
-    s = shot()
-    fx, fy = TOP_TAB_FRAC[name]
-    x, y = int(s.image.width * fx), int(s.image.height * fy)
-    I.click(x, y, space="image", shot=s)
-    time.sleep(2.0)
-    s2 = shot(f"tab-{name.lower()}")
-    if not _tab_is_active(s2, name):
-        raise RuntimeError(
-            f"tab {name!r} clicked at image ({x},{y}) but its accent "
-            f"underline was not confirmed afterward; see {s2.path}")
-    return s2
+    return open_tab_with_evidence(name)[0]
 
 
 def navigate_scope(section: str, control_set: str | None = None) -> Shot:

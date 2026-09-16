@@ -33,6 +33,7 @@ from PIL import Image
 
 from mcp_vroid.driver import actions as A
 from mcp_vroid.driver import locate as L
+from mcp_vroid.driver import window as W
 from mcp_vroid.driver.types import Shot
 
 FIXTURES = Path(__file__).parent / "fixtures" / "top-tab-navigation"
@@ -189,18 +190,6 @@ class TestOpenTabControlFlow:
         shot_mock.assert_not_called()
         click_mock.assert_not_called()
 
-    def test_verification_failure_raises_and_attempts_no_second_click(self):
-        pre = _shot("post-click-002-face-active.png")     # arbitrary pre-click frame
-        # simulate a click that lands but the tab never actually activates
-        post_no_underline = Shot(Image.new("RGB", pre.image.size, "white"),
-                                 Path("/fake/no-underline.png"), 0, 0, 1.0)
-        with patch.object(A, "shot", side_effect=[pre, post_no_underline]) as shot_mock, \
-                patch.object(A.I, "click") as click_mock:
-            with pytest.raises(RuntimeError, match="accent underline was not confirmed"):
-                A.open_tab("Body")
-        assert click_mock.call_count == 1          # no retry
-        assert shot_mock.call_count == 2           # pre-click locate + post-click verify only
-
     def test_successful_click_returns_the_post_click_shot(self):
         pre = _shot("post-click-002-face-active.png")
         post = _shot("post-click-020-body-active.png")    # has Body's real underline
@@ -225,3 +214,175 @@ class TestOpenTabControlFlow:
                 patch.object(A.I, "click"), patch("time.sleep"):
             result = A.open_tab("Face")
         assert result is post
+
+
+# --- bounded retry (CANARY-0001 postmortem repair) --------------------------
+#
+# CANARY-0001 (2026-09-16 production canary) established: the calibrated
+# Body click target was geometrically correct, the click was dispatched,
+# Body did not activate, and the existing verifier correctly detected Face
+# remained active -- a genuine click/input miss, not a verifier defect (see
+# ~/VRoid-scratch/canary-0001-postmortem/). Native F1/F2/F3 shortcuts were
+# then evaluated as an alternative and found not to work on this VRoid
+# build via four independent delivery-method variants (deferred finding,
+# see ~/VRoid-scratch/nav-shortcut-qualification-20260916/). This class
+# covers the bounded (<=2 click), evidenced retry adopted instead.
+
+def _fake_window(w, h):
+    return W.Window(address="x", cls="net.pixiv.vroid.macosx", title="t",
+                     x=0, y=0, w=w, h=h, workspace=0, focused=True)
+
+
+class TestBoundedRetryNavigation:
+
+    def test_1_already_active_zero_clicks(self):
+        already = _shot("post-click-020-body-active.png")   # Body active
+        with patch.object(A, "shot", return_value=already) as shot_mock, \
+                patch.object(A.I, "click") as click_mock:
+            result, ev = A.open_tab_with_evidence("Body")
+        assert result is already
+        click_mock.assert_not_called()
+        assert shot_mock.call_count == 1
+        assert ev["outcome"] == A.NAV_ALREADY_ACTIVE
+        assert ev["clicks"] == 0
+
+    def test_2_first_attempt_succeeds_one_click(self):
+        pre = _shot("post-click-002-face-active.png")        # Face active
+        post = _shot("post-click-020-body-active.png")       # Body active
+        with patch.object(A, "shot", side_effect=[pre, post]), \
+                patch.object(A.I, "click") as click_mock, patch("time.sleep"):
+            result, ev = A.open_tab_with_evidence("Body")
+        assert result is post
+        assert click_mock.call_count == 1
+        assert ev["outcome"] == A.NAV_FIRST_ATTEMPT_VERIFIED
+        assert ev["clicks"] == 1
+        assert len(ev["attempts"]) == 1
+
+    def test_3_first_fails_second_succeeds_exactly_two_clicks(self):
+        pre = _shot("post-click-002-face-active.png")         # Face active
+        post1 = _shot("canary-0001-449-body-failed-face-still-active.png")  # still Face
+        reval = _shot("canary-0001-449-body-failed-face-still-active.png")  # still Face
+        post2 = _shot("post-click-020-body-active.png")       # now Body active
+        with patch.object(A, "shot", side_effect=[pre, post1, reval, post2]), \
+                patch.object(A.I, "click") as click_mock, patch("time.sleep"), \
+                patch.object(A.W, "find_window",
+                            return_value=_fake_window(*pre.image.size)):
+            result, ev = A.open_tab_with_evidence("Body")
+        assert result is post2
+        assert click_mock.call_count == 2
+        assert ev["outcome"] == A.NAV_SECOND_ATTEMPT_VERIFIED
+        assert ev["clicks"] == 2
+        assert len(ev["attempts"]) == 2
+
+    def test_4_late_verified_before_retry_only_one_click(self):
+        pre = _shot("post-click-002-face-active.png")         # Face active
+        post1 = _shot("canary-0001-449-body-failed-face-still-active.png")  # still Face
+        reval = _shot("post-click-020-body-active.png")       # a delayed redraw: now Body
+        with patch.object(A, "shot", side_effect=[pre, post1, reval]), \
+                patch.object(A.I, "click") as click_mock, patch("time.sleep"), \
+                patch.object(A.W, "find_window",
+                            return_value=_fake_window(*pre.image.size)):
+            result, ev = A.open_tab_with_evidence("Body")
+        assert result is reval
+        assert click_mock.call_count == 1              # no second click sent
+        assert ev["outcome"] == A.NAV_LATE_VERIFIED_BEFORE_RETRY
+        assert ev["clicks"] == 1
+
+    def test_5_both_attempts_fail_exactly_two_clicks_then_exception(self):
+        pre = _shot("post-click-002-face-active.png")
+        post1 = _shot("canary-0001-449-body-failed-face-still-active.png")
+        reval = _shot("canary-0001-449-body-failed-face-still-active.png")
+        post2 = _shot("canary-0001-449-body-failed-face-still-active.png")
+        with patch.object(A, "shot", side_effect=[pre, post1, reval, post2]), \
+                patch.object(A.I, "click") as click_mock, patch("time.sleep"), \
+                patch.object(A.W, "find_window",
+                            return_value=_fake_window(*pre.image.size)):
+            with pytest.raises(RuntimeError, match="accent underline was not confirmed"):
+                A.open_tab_with_evidence("Body")
+        assert click_mock.call_count == 2               # exactly two, no third
+
+    def test_6_geometry_change_before_retry_no_second_click(self):
+        pre = _shot("post-click-002-face-active.png")
+        post1 = _shot("canary-0001-449-body-failed-face-still-active.png")
+        reval = _shot("canary-0001-449-body-failed-face-still-active.png")
+        changed = _fake_window(pre.image.width + 200, pre.image.height)
+        with patch.object(A, "shot", side_effect=[pre, post1, reval]), \
+                patch.object(A.I, "click") as click_mock, patch("time.sleep"), \
+                patch.object(A.W, "find_window", return_value=changed):
+            with pytest.raises(RuntimeError, match="geometry changed"):
+                A.open_tab_with_evidence("Body")
+        assert click_mock.call_count == 1                # no second click
+
+    def test_7_window_identity_lost_no_second_click(self):
+        pre = _shot("post-click-002-face-active.png")
+        post1 = _shot("canary-0001-449-body-failed-face-still-active.png")
+        with patch.object(A, "shot", side_effect=[pre, post1]), \
+                patch.object(A.I, "click") as click_mock, patch("time.sleep"), \
+                patch.object(A.W, "find_window", return_value=None):
+            with pytest.raises(RuntimeError, match="could not be reacquired"):
+                A.open_tab_with_evidence("Body")
+        assert click_mock.call_count == 1                # no second click
+
+    def test_8_neighbouring_active_tab_cannot_satisfy_verification(self):
+        """A frame where Face (not Body) is active must never verify Body,
+        even though *some* tab's underline is genuinely present."""
+        face_active = _shot("canary-0001-449-body-failed-face-still-active.png")
+        assert A._tab_is_active(face_active, "Body") is False
+        assert A._tab_is_active(face_active, "Face") is True
+
+    def test_9_canary_0001_fixture_first_attempt_leaves_face_active_retry_eligible(self):
+        """The real CANARY-0001 failure frame: attempt 1 must be classified
+        as unverified (not raise immediately -- the postmortem's whole
+        point is that this needs a bounded retry, not an instant failure),
+        making the retry path eligible rather than failing outright."""
+        pre = _shot("post-click-002-face-active.png")
+        incident = _shot("canary-0001-449-body-failed-face-still-active.png")
+        reval = _shot("canary-0001-449-body-failed-face-still-active.png")
+        recovered = _shot("post-click-020-body-active.png")
+        with patch.object(A, "shot", side_effect=[pre, incident, reval, recovered]), \
+                patch.object(A.I, "click") as click_mock, patch("time.sleep"), \
+                patch.object(A.W, "find_window",
+                            return_value=_fake_window(*pre.image.size)):
+            result, ev = A.open_tab_with_evidence("Body")
+        assert ev["attempts"][0]["verified"] is False
+        assert ev["attempts"][0]["capture"] == str(incident.path)
+        assert ev["outcome"] == A.NAV_SECOND_ATTEMPT_VERIFIED   # retry recovered it
+        assert click_mock.call_count == 2
+
+    def test_10_known_good_body_fixture_first_attempt_succeeds(self):
+        """The real, earlier-in-the-same-run successful Body click from the
+        CANARY-0001 planning phase: must verify on the first attempt,
+        with no retry needed."""
+        pre = _shot("post-click-002-face-active.png")
+        known_good = _shot("canary-0001-429-body-known-good.png")
+        with patch.object(A, "shot", side_effect=[pre, known_good]), \
+                patch.object(A.I, "click") as click_mock, patch("time.sleep"):
+            result, ev = A.open_tab_with_evidence("Body")
+        assert A._tab_is_active(known_good, "Body") is True
+        assert ev["outcome"] == A.NAV_FIRST_ATTEMPT_VERIFIED
+        assert ev["clicks"] == 1
+        assert click_mock.call_count == 1
+
+    def test_11_no_parameter_input_during_navigation(self):
+        """Navigation must never touch a numeric field, in either the
+        happy path or the full bounded-retry path."""
+        pre = _shot("post-click-002-face-active.png")
+        post1 = _shot("canary-0001-449-body-failed-face-still-active.png")
+        reval = _shot("canary-0001-449-body-failed-face-still-active.png")
+        post2 = _shot("post-click-020-body-active.png")
+        with patch.object(A, "shot", side_effect=[pre, post1, reval, post2]), \
+                patch.object(A.I, "click"), patch("time.sleep"), \
+                patch.object(A.I, "type_field_value") as type_mock, \
+                patch.object(A.W, "find_window",
+                            return_value=_fake_window(*pre.image.size)):
+            A.open_tab_with_evidence("Body")
+        type_mock.assert_not_called()
+
+    def test_canary_0001_evidence_remains_classified_as_click_failure_not_verifier_failure(self):
+        """Permanent regression pin for the postmortem's conclusion: on the
+        actual incident pixels, the verifier's read is correct (Face is
+        genuinely active, Body genuinely is not) -- the defect was the
+        click/input, never this check."""
+        incident = _shot("canary-0001-449-body-failed-face-still-active.png")
+        assert A._tab_is_active(incident, "Face") is True
+        assert A._tab_is_active(incident, "Body") is False
