@@ -49,6 +49,22 @@ def test_parse_value_handles_cm_and_garbage():
     assert M.parse_value("nan") is None
 
 
+def test_parse_chip_handles_cm_and_hallucinated_units():
+    # lyra-sculpt-0021 (candidate-006): OCR returned "0.360 nm" / "0.300 nm"
+    # for a plain, unitless Face slider -- no unit text was actually on
+    # screen. _parse_chip must not whitelist units one at a time; it takes
+    # the leading numeric token and ignores any trailing suffix.
+    assert A._parse_chip("0.360 nm") == 0.36
+    assert A._parse_chip("0.300 nm") == 0.3
+    assert A._parse_chip("1.250cm") == 1.25  # existing Body case, no regression
+    assert A._parse_chip("0.260") == 0.26  # existing plain case, no regression
+    assert A._parse_chip("-0.573") == -0.573
+    assert A._parse_chip("") is None
+    assert A._parse_chip(None) is None
+    assert A._parse_chip("nm") is None
+    assert A._parse_chip("(Y) -0.573") is None
+
+
 # --- plan rejections -------------------------------------------------------
 
 def _inv(rows):

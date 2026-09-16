@@ -5,6 +5,7 @@ screenshot says. Callers get the Shot back so they can Read the PNG.
 """
 from __future__ import annotations
 
+import re
 import time
 from pathlib import Path
 
@@ -804,9 +805,27 @@ def dispatch_value(s: Shot, m, value: float) -> None:
     _type_value(s, m, value)
 
 
+_CHIP_NUMBER_RE = re.compile(r"[-+]?\d+(?:\.\d+)?")
+
+
 def _parse_chip(raw: str) -> float | None:
+    """Extract the leading numeric token from an OCR'd chip string.
+
+    OCR occasionally hallucinates a trailing unit-like suffix that is not
+    present in the actual UI (observed live: "0.360 nm" on a plain,
+    unitless Face slider -- see candidate-006/recovery-confirmation.md in
+    the lyra repo). Rather than whitelist each hallucinated unit seen so
+    far (as a prior fix did for "cm"), take the leading numeric token and
+    ignore anything after it; a chip with no leading number at all (empty,
+    or pure garbage) still correctly reports unreadable.
+    """
+    if not raw:
+        return None
+    m = _CHIP_NUMBER_RE.match(raw.strip())
+    if not m:
+        return None
     try:
-        return float(raw.replace("cm", "").replace(" ", "").strip())
+        return float(m.group(0))
     except ValueError:
         return None
 
