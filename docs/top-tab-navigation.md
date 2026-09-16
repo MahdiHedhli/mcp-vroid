@@ -138,3 +138,34 @@ a click that doesn't produce the expected underline raises
   fraction-based, but a materially different aspect ratio or a future
   VRoid layout change would need re-calibration and is not covered by the
   regression tests.
+
+
+## Deferred work (explicitly out of scope for this repair)
+
+Recorded during Project Lyra Gate B B2 review, not implemented now:
+
+- **Left-hand category mapping.** `TOP_TAB_FRAC` covers only the six
+  top-level tabs (Face/Hairstyle/Body/Outfit/Accessories/Look). The
+  left-rail sub-categories within a tab (e.g. Face's "Face Sets"/"Eyes
+  Sets"/"Irises"/...) still resolve by `_panel_title` OCR verification
+  after a coordinate-guess click (`face_category`/`body_category`/
+  `hair_category` in `actions.py`), unaffected by this incident and
+  untouched here. Map additional categories the same way -- calibrated
+  fractions plus a state check -- only when a specific character task
+  actually needs one that isn't already covered, not preemptively.
+- **Keyboard-shortcut navigation.** VRoid Studio may expose documented
+  keyboard shortcuts for tab/category switching as an alternative to
+  clicking. Not evaluated here. If considered later, treat it as a new
+  mechanism needing its own calibration and regression tests (same bar as
+  this repair), not a drop-in replacement.
+- **Camera/orientation fixes.** Out of scope for this repair and for Gate
+  B generally (see the executor's `capture_views`, which already labels
+  captures `current-camera`/`orientation: not_established` rather than
+  claiming front/three-quarter/side). Evaluate separately.
+- **Category navigation vs. preset application stay distinct.** Selecting
+  a left-rail category (read-only navigation, like `open_tab`/
+  `face_category`) must not be conflated with clicking a preset tile in
+  that category, which *changes the model*. Any future left-menu mapping
+  work must preserve this distinction -- a calibrated click that lands on
+  a category header is not interchangeable with one that lands on a
+  preset thumbnail.
