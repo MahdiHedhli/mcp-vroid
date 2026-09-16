@@ -630,14 +630,28 @@ def find_param(label: str, max_pages: int = 24, from_top: bool = True):
 
 
 def _type_value(s: Shot, m, value: float) -> None:
-    """Click the numeric chip then type `value` via the platform field helper."""
+    """Click the numeric chip then type `value` via the platform field helper.
+
+    The click uses the ordinary guarded path (_guard -> assert_vroid_focused
+    -> focus() if needed), same as every other click in this driver. It did
+    not always: this call used to wrap its click in set_safety(False),
+    skipping that focus check specifically here. That left a gap between
+    "application focus" and "numeric-field focus": the click can visually
+    land (Quartz posts it straight to VRoid's pid, focused or not) without
+    Unity necessarily registering it as placing a text-edit caret, and
+    type_field_value's own "activate VRoid Studio" happens only *after* this
+    click -- too late to help the click itself. That combination is a
+    plausible, code-supported explanation for a keystroke sequence
+    completing normally while the field's value never changes (observed
+    live, 2026-09-16: Chest Size restore dispatched and returned normally,
+    but three fresh post-dispatch observations of that exact same chip all
+    still read the pre-dispatch value); it has not been confirmed live as
+    the specific mechanism. Guarding this click, like every other one,
+    closes that gap without adding a new input backend or a blanket sleep.
+    """
     x = _value_click_x(s, m)
     y = m.center[1]
-    I.set_safety(False)
-    try:
-        I.click(x, y, space="image", shot=s)
-    finally:
-        I.set_safety(True)
+    I.click(x, y, space="image", shot=s)
     time.sleep(0.12)
     I.type_field_value(f"{value:.3f}")
 
