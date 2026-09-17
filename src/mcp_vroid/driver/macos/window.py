@@ -61,7 +61,10 @@ def _window_entries(on_screen_only: bool = True) -> list[dict]:
 def _is_vroid_window(entry: dict) -> bool:
     owner = str(entry.get("kCGWindowOwnerName") or "")
     title = str(entry.get("kCGWindowName") or "")
-    if owner.lower() != "vroid studio":
+    # kCGWindowOwnerName has been observed as both "VRoid Studio" and
+    # "VRoidStudio" (e.g. after a login-time relaunch post-reboot) for the
+    # same app; compare space-insensitively rather than matching one spelling.
+    if owner.lower().replace(" ", "") != "vroidstudio":
         return False
     bounds = entry.get("kCGWindowBounds") or {}
     w = float(bounds.get("Width") or 0)

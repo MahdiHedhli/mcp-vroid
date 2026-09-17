@@ -25,6 +25,13 @@ def test_rejects_safari_or_wrong_owner():
     assert _is_vroid_window(_entry(**{"kCGWindowOwnerName": "Safari"})) is False
 
 
+def test_accepts_owner_name_without_space():
+    # Observed live after a login-time relaunch post-reboot: same app,
+    # kCGWindowOwnerName reports "VRoidStudio" instead of "VRoid Studio".
+    assert _is_vroid_window(_entry(**{"kCGWindowOwnerName": "VRoidStudio"})) is True
+    assert _is_vroid_window(_entry(**{"kCGWindowOwnerName": "vroidstudio"})) is True
+
+
 def test_rejects_tiny_or_menu_surfaces():
     assert _is_vroid_window(_entry(
         **{"kCGWindowBounds": {"X": 0, "Y": 0, "Width": 500, "Height": 30},
